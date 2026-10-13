@@ -23,6 +23,7 @@ type RoutineItem = {
 };
 
 export default function Home() {
+  const [userName, setUserName] = useState("");
   const [routine, setRoutine] = useState<RoutineItem[]>([]);
   const [routineLoading, setRoutineLoading] = useState(true);
   const [yesterdayScore, setYesterdayScore] = useState<number | null>(null);
@@ -301,6 +302,14 @@ const [newActivityEnd, setNewActivityEnd] = useState("");
         setRoutineLoading(false);
         return;
       }
+
+      const displayName =
+  user.user_metadata?.display_name ||
+  user.user_metadata?.full_name ||
+  user.email?.split("@")[0] ||
+  "";
+
+setUserName(displayName);
 
       // JavaScript:
       // Sunday = 0, Monday = 1 ... Saturday = 6
@@ -1200,8 +1209,8 @@ async function saveNewActivity() {
           <header className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-sm font-medium text-indigo-600">
-                TODAY
-              </p>
+  {userName ? `Hi, ${userName} 👋` : "TODAY"}
+</p>
 
               <h2 className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">
                 Build a better day.
