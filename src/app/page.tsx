@@ -1185,7 +1185,7 @@ async function saveNewActivity() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="mx-auto flex min-h-screen max-w-[1500px]">
+      <div className="mx-auto min-h-screen max-w-[1500px]">
 
         {/* Sidebar */}
 
@@ -1197,7 +1197,7 @@ async function saveNewActivity() {
 
           {/* Header */}
 
-          <header className="mb-8 flex items-start justify-between">
+          <header className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-sm font-medium text-indigo-600">
                 TODAY
@@ -1215,7 +1215,7 @@ async function saveNewActivity() {
 
             <button
               onClick={() => setShowQuickCapture(true)}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium shadow-sm"
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium shadow-sm sm:w-auto"
               >
               + Quick Capture
             </button>
@@ -1223,7 +1223,7 @@ async function saveNewActivity() {
 
           {/* KPI Cards */}
 
-          <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mb-8 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-sm text-slate-500">
@@ -1358,9 +1358,9 @@ async function saveNewActivity() {
                   routine.map((item) => (
                     <div
                       key={item.id}
-                      className="grid grid-cols-[110px_1fr_auto] items-center gap-3 px-5 py-3"
+                      className="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-3 sm:grid-cols-[110px_1fr_auto] sm:px-5"
                     >
-                      <span className="text-sm font-medium text-slate-400">
+                      <span className="col-span-2 text-xs font-medium text-slate-400 sm:col-span-1 sm:text-sm">
                         {item.time}
                         {item.endTime
                           ? ` – ${item.endTime}`
