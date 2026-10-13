@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/client";
 import Link from "next/link";
 import LifeOSSidebar from "@/components/LifeOSSidebar";
 
@@ -997,6 +997,45 @@ async function markActivityAsLost(activity: RoutineItem) {
   setCompletingActivity(null);
 }
 
+async function deleteManualActivity(activity: RoutineItem) {
+  if (!activity.isManual) return;
+
+  const confirmed = window.confirm(
+    `Delete "${activity.activity}"? This activity will be permanently removed.`
+  );
+
+  if (!confirmed) return;
+
+  const supabase = createClient();
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    alert("Unable to find your signed-in account.");
+    return;
+  }
+
+  const { error } = await supabase
+    .from("daily_activities")
+    .delete()
+    .eq("id", activity.id)
+    .eq("user_id", user.id)
+    .is("routine_item_id", null);
+
+  if (error) {
+    console.error("Error deleting activity:", error);
+    alert("The activity could not be deleted.");
+    return;
+  }
+
+  setRoutine((current) =>
+    current.filter((item) => item.id !== activity.id)
+  );
+}
+
 async function saveNewActivity() {
   // Prevent the function from running twice while already saving.
   if (isSavingActivity) return;
@@ -1364,28 +1403,45 @@ async function saveNewActivity() {
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => {
-                          if (item.done || item.status === "lost") {
-                          reopenActivity(item.id);
-                          return;
-                          }
+                      <div className="flex items-center gap-2">
+  {item.isManual && (
+    <button
+      type="button"
+      onClick={() => deleteManualActivity(item)}
+      className="flex h-8 w-8 items-center justify-center rounded-full border border-rose-200 text-xs text-rose-500 transition hover:bg-rose-50 hover:text-rose-700"
+      aria-label={`Delete ${item.activity}`}
+      title="Delete activity"
+    >
+      🗑
+    </button>
+  )}
 
-                          setCompletingActivity(item);
-                        }}
-                        className={`flex h-8 w-8 items-center justify-center rounded-full text-sm transition ${
-                          item.done
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "border border-slate-200 text-slate-300 hover:border-indigo-300 hover:text-indigo-500"
-                        }`}
-                        aria-label={
-                          item.done
-                            ? `Reopen ${item.activity}`
-                            : `Complete ${item.activity}`
-                        }
-                      >
-                        {item.done ? "✓" : item.status === "lost" ? "↺" : "○"}
-                      </button>
+  {!item.isManual && (
+    <button
+      type="button"
+      onClick={() => {
+        if (item.done || item.status === "lost") {
+          reopenActivity(item.id);
+          return;
+        }
+
+        setCompletingActivity(item);
+      }}
+      className={`flex h-8 w-8 items-center justify-center rounded-full text-sm transition ${
+        item.done
+          ? "bg-emerald-100 text-emerald-700"
+          : "border border-slate-200 text-slate-300 hover:border-indigo-300 hover:text-indigo-500"
+      }`}
+      aria-label={
+        item.done
+          ? `Reopen ${item.activity}`
+          : `Complete ${item.activity}`
+      }
+    >
+      {item.done ? "✓" : item.status === "lost" ? "↺" : "○"}
+    </button>
+  )}
+</div>
                     </div>
                   ))}
               </div>

@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/client";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -28,11 +29,11 @@ export default function LoginPage() {
       return;
     }
 
-    window.location.href = "/settings";
+    window.location.href = "/";
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+    <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         <p className="text-sm font-semibold text-indigo-600">
           LIFEOS
@@ -42,37 +43,48 @@ export default function LoginPage() {
           Welcome back
         </h1>
 
-        <p className="mt-2 mb-8 text-slate-500">
+        <p className="mb-8 mt-2 text-slate-500">
           Sign in to continue building your system.
         </p>
 
         <form onSubmit={handleLogin} className="space-y-5">
           <div>
-            <label className="mb-2 block text-sm font-medium">
+            <label className="mb-2 block text-sm font-medium text-slate-700">
               Email
             </label>
 
             <input
               type="email"
               required
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-400"
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none transition focus:border-indigo-400"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium">
-              Password
-            </label>
+            <div className="mb-2 flex items-center justify-between">
+              <label className="block text-sm font-medium text-slate-700">
+                Password
+              </label>
+
+              <Link
+                href="/forgot-password"
+                className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+              >
+                Forgot password?
+              </Link>
+            </div>
 
             <input
               type="password"
               required
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-400"
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none transition focus:border-indigo-400"
               placeholder="Your password"
             />
           </div>
@@ -80,7 +92,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-indigo-600 py-3 font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="w-full rounded-xl bg-indigo-600 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? "Signing in..." : "Sign in"}
           </button>
@@ -91,6 +103,18 @@ export default function LoginPage() {
             {message}
           </p>
         )}
+
+        <div className="mt-8 border-t border-slate-100 pt-6 text-center">
+          <p className="text-sm text-slate-500">
+            New to LifeOS?{" "}
+            <Link
+              href="/signup"
+              className="font-semibold text-indigo-600 hover:text-indigo-700"
+            >
+              Create an account
+            </Link>
+          </p>
+        </div>
       </div>
     </main>
   );

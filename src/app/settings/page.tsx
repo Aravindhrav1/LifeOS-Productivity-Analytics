@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/client";
 import LifeOSSidebar from "@/components/LifeOSSidebar";
 
 type Category = {
@@ -51,6 +51,11 @@ export default function SettingsPage() {
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+const [deleteConfirmation, setDeleteConfirmation] = useState("");
+const [deletingAccount, setDeletingAccount] = useState(false);
+const [accountDeleteError, setAccountDeleteError] = useState("");
 
   async function loadData() {
     const supabase = createClient();
@@ -243,6 +248,46 @@ export default function SettingsPage() {
     await loadData();
     setDeletingId(null);
   }
+
+async function deleteAccount() {
+  if (deleteConfirmation !== "DELETE" || deletingAccount) return;
+
+  const confirmed = window.confirm(
+    "Permanently delete your LifeOS account and all of your data? This cannot be undone."
+  );
+
+  if (!confirmed) return;
+
+  setDeletingAccount(true);
+  setAccountDeleteError("");
+
+  try {
+    const response = await fetch("/api/delete-account", {
+      method: "DELETE",
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      setAccountDeleteError(
+        result.error || "Could not delete your account."
+      );
+      setDeletingAccount(false);
+      return;
+    }
+
+    const supabase = createClient();
+    await supabase.auth.signOut();
+
+    window.location.href = "/signup";
+  } catch (error) {
+    console.error("Account deletion failed:", error);
+    setAccountDeleteError(
+      "Something went wrong while deleting your account."
+    );
+    setDeletingAccount(false);
+  }
+}
 
   function categoryFor(id: number) {
     return categories.find((category) => category.id === id);
@@ -532,9 +577,98 @@ export default function SettingsPage() {
               </div>
             )}
           </div>
-        </section>
-      </div>
-    </section>
+                  </section>
+
+          <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold">Account</h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Manage your LifeOS account and personal data.
+            </p>
+
+            <div className="mt-6 rounded-xl border border-rose-200 bg-rose-50/40 p-5">
+              <h3 className="font-semibold text-rose-700">
+                Danger zone
+              </h3>
+
+              <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                Permanently delete your LifeOS account and all of your
+                data. This action cannot be undone.
+              </p>
+
+              {!showDeleteAccount ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccountDeleteError("");
+                    setShowDeleteAccount(true);
+                  }}
+                  className="mt-5 rounded-xl border border-rose-300 bg-white px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50"
+                >
+                  Delete my account
+                </button>
+              ) : (
+                <div className="mt-5 max-w-md">
+                  <p className="text-sm font-medium text-slate-700">
+                    Type{" "}
+                    <span className="font-bold text-rose-600">
+                      DELETE
+                    </span>{" "}
+                    to confirm.
+                  </p>
+
+                  <input
+                    type="text"
+                    value={deleteConfirmation}
+                    onChange={(e) =>
+                      setDeleteConfirmation(e.target.value)
+                    }
+                    disabled={deletingAccount}
+                    placeholder="DELETE"
+                    className="mt-3 w-full rounded-xl border border-rose-200 bg-white px-4 py-3 outline-none focus:border-rose-400 disabled:opacity-50"
+                  />
+
+                  {accountDeleteError && (
+                    <p className="mt-3 text-sm text-rose-600">
+                      {accountDeleteError}
+                    </p>
+                  )}
+
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={deleteAccount}
+                      disabled={
+                        deleteConfirmation !== "DELETE" ||
+                        deletingAccount
+                      }
+                      className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {deletingAccount
+                        ? "Deleting account..."
+                        : "Permanently delete account"}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={deletingAccount}
+                      onClick={() => {
+                        setShowDeleteAccount(false);
+                        setDeleteConfirmation("");
+                        setAccountDeleteError("");
+                      }}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+        </div>
+      </section>
   </main>
 );
 }

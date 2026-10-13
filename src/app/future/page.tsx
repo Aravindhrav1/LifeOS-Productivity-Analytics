@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/client";
 import LifeOSSidebar from "@/components/LifeOSSidebar";
 
 type Goal = {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/client";
 import LifeOSSidebar from "@/components/LifeOSSidebar";
 
 type Activity = {

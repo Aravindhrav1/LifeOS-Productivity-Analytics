@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/client";
 
 export default function SignupPage() {
   const [name, setName] = useState("");
