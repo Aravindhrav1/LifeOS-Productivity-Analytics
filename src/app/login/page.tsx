@@ -4,6 +4,14 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { createClient } from "@/lib/client";
 
+const DEFAULT_CATEGORIES = [
+  { name: "Lost", type: "Lost", icon: "🔴", is_active: true },
+  { name: "Maintain", type: "Maintain", icon: "🏠", is_active: true },
+  { name: "Build", type: "Build", icon: "🚀", is_active: true },
+  { name: "Enjoy", type: "Enjoy", icon: "💗", is_active: true },
+  { name: "Sleep", type: "Sleep", icon: "😴", is_active: true },
+];
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,15 +26,79 @@ export default function LoginPage() {
 
     const supabase = createClient();
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const {
+      data: loginData,
+      error: loginError,
+    } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    if (error) {
-      setMessage(`❌ ${error.message}`);
+    if (loginError) {
+      setMessage(`❌ ${loginError.message}`);
       setLoading(false);
       return;
+    }
+
+    const user = loginData.user;
+
+    if (!user) {
+      setMessage("❌ Unable to load your account. Please try again.");
+      setLoading(false);
+      return;
+    }
+
+    // Check which LifeOS categories this user already has.
+    const {
+      data: existingCategories,
+      error: categoryCheckError,
+    } = await supabase
+      .from("categories")
+      .select("name")
+      .eq("user_id", user.id);
+
+    if (categoryCheckError) {
+      console.error(
+        "Unable to check LifeOS categories:",
+        categoryCheckError
+      );
+
+      setMessage(
+        "❌ Signed in, but LifeOS could not initialise your categories."
+      );
+      setLoading(false);
+      return;
+    }
+
+    const existingNames = new Set(
+      (existingCategories ?? []).map((category) => category.name)
+    );
+
+    // Create only categories that are missing.
+    const missingCategories = DEFAULT_CATEGORIES.filter(
+      (category) => !existingNames.has(category.name)
+    ).map((category) => ({
+      ...category,
+      user_id: user.id,
+    }));
+
+    if (missingCategories.length > 0) {
+      const { error: categoryInsertError } = await supabase
+        .from("categories")
+        .insert(missingCategories);
+
+      if (categoryInsertError) {
+        console.error(
+          "Unable to create LifeOS categories:",
+          categoryInsertError
+        );
+
+        setMessage(
+          "❌ Signed in, but LifeOS could not initialise your categories."
+        );
+        setLoading(false);
+        return;
+      }
     }
 
     window.location.href = "/";
@@ -49,11 +121,16 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-5">
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
+            <label
+              htmlFor="email"
+              className="mb-2 block text-sm font-medium text-slate-700"
+            >
               Email
             </label>
 
             <input
+              id="email"
+              name="email"
               type="email"
               required
               autoComplete="email"
@@ -66,7 +143,10 @@ export default function LoginPage() {
 
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <label className="block text-sm font-medium text-slate-700">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-slate-700"
+              >
                 Password
               </label>
 
@@ -79,6 +159,8 @@ export default function LoginPage() {
             </div>
 
             <input
+              id="password"
+              name="password"
               type="password"
               required
               autoComplete="current-password"
