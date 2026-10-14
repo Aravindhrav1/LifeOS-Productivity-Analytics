@@ -20,6 +20,7 @@ type RoutineItem = {
   asPlanned: boolean;
   isManual: boolean;
   buildFocus: string | null;
+reminderMinutes: number | null;
 };
 
 export default function Home() {
@@ -282,6 +283,9 @@ const [newActivityBuildFocus, setNewActivityBuildFocus] =
 
 const [newActivityStart, setNewActivityStart] = useState("");
 const [newActivityEnd, setNewActivityEnd] = useState("");
+const [newActivityReminder, setNewActivityReminder] = useState("");
+const [editingManualActivity, setEditingManualActivity] =
+  useState<RoutineItem | null>(null);
 
   useEffect(() => {
     async function loadTodayRoutine() {
@@ -336,6 +340,7 @@ const todayDay = jsDay === 0 ? 7 : jsDay;
           end_time,
           days_of_week,
           category_id,
+          reminder_minutes,
           categories (
             name,
             icon
@@ -386,6 +391,7 @@ const activityDate = [
           title: item.title,
           planned_start: item.start_time,
           planned_end: item.end_time,
+          reminder_minutes: item.reminder_minutes,
           status: "planned",
           as_planned: false,
         }));
@@ -431,6 +437,7 @@ if (
         title: item.title,
         planned_start: item.start_time,
         planned_end: item.end_time,
+        reminder_minutes: item.reminder_minutes,
         updated_at: new Date().toISOString(),
       })
       .eq("user_id", user.id)
@@ -457,6 +464,7 @@ if (
           id,
           routine_item_id,
           build_focus,
+          reminder_minutes,
           title,
           planned_start,
           planned_end,
@@ -520,6 +528,7 @@ endTime:
         asPlanned: item.as_planned ?? false,
         isManual: item.routine_item_id === null,
         buildFocus: item.build_focus ?? null,
+        reminderMinutes: item.reminder_minutes ?? null,
       }));
 
       setRoutine(formattedRoutine);
@@ -1042,6 +1051,24 @@ async function markActivityAsLost(activity: RoutineItem) {
   setCompletingActivity(null);
 }
 
+function openEditManualActivity(activity: RoutineItem) {
+  if (!activity.isManual) return;
+
+  setNewActivityTitle(activity.activity);
+  setNewActivityCategory(activity.type);
+  setNewActivityBuildFocus(activity.buildFocus ?? "Projects");
+  setNewActivityStart(activity.actualStart ?? activity.time);
+  setNewActivityEnd(activity.actualEnd ?? activity.endTime ?? "");
+  setNewActivityReminder(
+    activity.reminderMinutes === null
+      ? ""
+      : String(activity.reminderMinutes)
+  );
+
+  setEditingManualActivity(activity);
+  setShowAddActivity(true);
+}
+
 async function deleteManualActivity(activity: RoutineItem) {
   if (!activity.isManual) return;
 
@@ -1142,6 +1169,107 @@ const activityDate = [
     const startTime = newActivityStart;
     const endTime = newActivityEnd;
 
+// If editing an existing manual activity, update it instead.
+if (editingManualActivity) {
+ const { error: updateError } = await supabase
+    .from("daily_activities")
+    .update({
+      category_id: category.id,
+      build_focus:
+        newActivityCategory === "Build"
+          ? newActivityBuildFocus
+          : null,
+      title,
+
+planned_start:
+  newActivityReminder !== "" ? startTime : null,
+
+planned_end:
+  newActivityReminder !== "" ? endTime : null,
+
+actual_start:
+  newActivityReminder !== ""
+    ? null
+    : startTime,
+
+actual_end:
+  newActivityReminder !== ""
+    ? null
+    : endTime,
+
+status:
+  newActivityReminder !== ""
+    ? "planned"
+    : "completed",
+
+as_planned: false,
+
+reminder_minutes:
+        selectedDateOffset === 0 && newActivityReminder !== ""
+          ? Number(newActivityReminder)
+          : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", editingManualActivity.id)
+.eq("user_id", user.id)
+.is("routine_item_id", null);
+
+if (updateError) {
+  console.error("Error updating activity:", updateError);
+  alert("The activity could not be updated.");
+  return;
+}
+
+  setRoutine((current) =>
+    current.map((item) =>
+      item.id === editingManualActivity.id
+        ? {
+            ...item,
+            activity: title,
+            type: category.name,
+            icon: category.icon ?? "",
+            time: startTime,
+endTime,
+done: newActivityReminder === "",
+status:
+  newActivityReminder !== ""
+    ? "planned"
+    : "completed",
+actualStart:
+  newActivityReminder !== ""
+    ? null
+    : startTime,
+actualEnd:
+  newActivityReminder !== ""
+    ? null
+    : endTime,
+asPlanned: false,
+            buildFocus:
+              newActivityCategory === "Build"
+                ? newActivityBuildFocus
+                : null,
+            reminderMinutes:
+              selectedDateOffset === 0 &&
+              newActivityReminder !== ""
+                ? Number(newActivityReminder)
+                : null,
+          }
+        : item
+    )
+  );
+
+  setShowAddActivity(false);
+  setEditingManualActivity(null);
+  setNewActivityTitle("");
+  setNewActivityCategory("Lost");
+  setNewActivityBuildFocus("Projects");
+  setNewActivityStart("");
+  setNewActivityEnd("");
+  setNewActivityReminder("");
+
+  return;
+}
+
     // Save ONE manual activity to Supabase.
     const { data: newActivity, error: activityError } =
       await supabase
@@ -1159,15 +1287,38 @@ const activityDate = [
           : null,
           title: title,
 
-          // No planned time because this was unplanned.
-          planned_start: null,
-          planned_end: null,
+          // A reminder means this is a planned one-off activity.
+// Without a reminder, keep the existing manual logging behaviour.
+planned_start:
+  selectedDateOffset === 0 && newActivityReminder !== ""
+    ? startTime
+    : null,
 
-          actual_start: startTime,
-          actual_end: endTime,
+planned_end:
+  selectedDateOffset === 0 && newActivityReminder !== ""
+    ? endTime
+    : null,
 
-          status: "completed",
-          as_planned: false,
+actual_start:
+  selectedDateOffset === 0 && newActivityReminder !== ""
+    ? null
+    : startTime,
+
+actual_end:
+  selectedDateOffset === 0 && newActivityReminder !== ""
+    ? null
+    : endTime,
+
+reminder_minutes:
+  selectedDateOffset === 0 && newActivityReminder !== ""
+    ? Number(newActivityReminder)
+    : null,
+
+status:
+  selectedDateOffset === 0 && newActivityReminder !== ""
+    ? "planned"
+    : "completed",
+as_planned: false,
         })
         .select()
         .single();
@@ -1199,12 +1350,28 @@ const activityDate = [
   activity: title,
   type: category.name,
   icon: category.icon ?? "",
-  done: true,
-  status: "completed",
-  actualStart: startTime,
-  actualEnd: endTime,
-  asPlanned: false,
-  isManual: true,
+  done: !(
+  selectedDateOffset === 0 &&
+  newActivityReminder !== ""
+),
+status:
+  selectedDateOffset === 0 && newActivityReminder !== ""
+    ? "planned"
+    : "completed",
+actualStart:
+  selectedDateOffset === 0 && newActivityReminder !== ""
+    ? null
+    : startTime,
+actualEnd:
+  selectedDateOffset === 0 && newActivityReminder !== ""
+    ? null
+    : endTime,
+asPlanned: false,
+isManual: true,
+reminderMinutes:
+  selectedDateOffset === 0 && newActivityReminder !== ""
+    ? Number(newActivityReminder)
+    : null,
   buildFocus:
   newActivityCategory === "Build"
     ? newActivityBuildFocus
@@ -1220,6 +1387,7 @@ const activityDate = [
     setNewActivityBuildFocus("Projects");
     setNewActivityStart("");
     setNewActivityEnd("");
+    setNewActivityReminder("");
   } catch (error) {
     console.error("Unexpected error adding activity:", error);
     alert("Something went wrong while adding the activity.");
@@ -1449,6 +1617,15 @@ const activityDate = [
                             {item.type}
                           </p>
 
+                          {item.reminderMinutes !== null && (
+  <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600">
+    🔔{" "}
+    {item.reminderMinutes === 0
+      ? "At start"
+      : `${item.reminderMinutes} min before`}
+  </span>
+)}
+
                           {item.status === "lost" && (
                           <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-600">
                             Lost
@@ -1477,6 +1654,17 @@ const activityDate = [
 
                       <div className="flex items-center gap-2">
   {item.isManual && (
+  <>
+    <button
+      type="button"
+      onClick={() => openEditManualActivity(item)}
+      className="flex h-8 w-8 items-center justify-center rounded-full border border-indigo-200 text-xs text-indigo-500 transition hover:bg-indigo-50 hover:text-indigo-700"
+      aria-label={`Edit ${item.activity}`}
+      title="Edit activity"
+    >
+      ✏️
+    </button>
+
     <button
       type="button"
       onClick={() => deleteManualActivity(item)}
@@ -1486,9 +1674,9 @@ const activityDate = [
     >
       🗑
     </button>
-  )}
-
-  {!item.isManual && (
+  </>
+)}
+  {(!item.isManual || item.status === "planned" || item.status === "lost") && (
     <button
       type="button"
       onClick={() => {
@@ -1800,6 +1988,8 @@ const activityDate = [
 
       </div>
 
+
+
       <div className="mt-6 flex justify-end gap-3">
 
         <button
@@ -1839,11 +2029,11 @@ const activityDate = [
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
     <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
       <h3 className="text-lg font-semibold text-slate-900">
-        Add activity
-      </h3>
+  {editingManualActivity ? "Edit activity" : "Add activity"}
+</h3>
 
       <p className="mt-1 text-sm text-slate-500">
-        Record something that was not in your planned routine.
+        Add a one-off activity or record something outside your normal routine.
       </p>
 
       <div className="mt-6 space-y-4">
@@ -1902,7 +2092,7 @@ const activityDate = [
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="mb-2 block text-xs font-medium text-slate-500">
-              Actual start
+              Start time
             </label>
 
             <input
@@ -1915,7 +2105,7 @@ const activityDate = [
 
           <div>
             <label className="mb-2 block text-xs font-medium text-slate-500">
-              Actual end
+              End time
             </label>
 
             <input
@@ -1924,8 +2114,28 @@ const activityDate = [
               onChange={(e) => setNewActivityEnd(e.target.value)}
               className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500"
             />
-          </div>
+                    </div>
         </div>
+
+        {selectedDateOffset === 0 && (
+          <div>
+            <label className="mb-2 block text-xs font-medium text-slate-500">
+              Reminder
+            </label>
+
+            <select
+              value={newActivityReminder}
+              onChange={(e) => setNewActivityReminder(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:border-indigo-500"
+            >
+              <option value="">Off</option>
+              <option value="0">At start time</option>
+              <option value="5">5 minutes before</option>
+              <option value="10">10 minutes before</option>
+              <option value="15">15 minutes before</option>
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="mt-6 flex justify-end gap-3">
@@ -1934,8 +2144,9 @@ const activityDate = [
             setShowAddActivity(false);
             setNewActivityTitle("");
             setNewActivityCategory("Lost");
-            setNewActivityStart("");
-            setNewActivityEnd("");
+setNewActivityStart("");
+setNewActivityEnd("");
+setNewActivityReminder("");
           }}
           className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600"
         >
@@ -1947,7 +2158,13 @@ const activityDate = [
           disabled={isSavingActivity}
           className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-          {isSavingActivity ? "Adding..." : "Add Activity"}
+          {isSavingActivity
+  ? editingManualActivity
+    ? "Saving..."
+    : "Adding..."
+  : editingManualActivity
+  ? "Save Changes"
+  : "Add Activity"}
         </button>
       </div>
     </div>

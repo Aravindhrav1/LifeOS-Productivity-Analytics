@@ -20,6 +20,7 @@ type RoutineItem = {
   days_of_week: number[];
   is_active: boolean;
   sort_order: number;
+reminder_minutes: number | null;
 };
 
 const days = [
@@ -44,6 +45,7 @@ export default function SettingsPage() {
   const [categoryId, setCategoryId] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [reminderMinutes, setReminderMinutes] = useState("");
   const [selectedDays, setSelectedDays] = useState<number[]>([
     1, 2, 3, 4, 5,
   ]);
@@ -51,6 +53,12 @@ export default function SettingsPage() {
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [notificationStatus, setNotificationStatus] = useState<
+  "checking" | "unsupported" | "enabled" | "disabled" | "denied"
+>("checking");
+
+const [enablingNotifications, setEnablingNotifications] = useState(false);
+const [notificationMessage, setNotificationMessage] = useState("");
 
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
 const [deleteConfirmation, setDeleteConfirmation] = useState("");
@@ -86,7 +94,7 @@ const [accountDeleteError, setAccountDeleteError] = useState("");
     const { data: routineData, error: routineError } = await supabase
       .from("routine_items")
       .select(
-        "id, title, category_id, start_time, end_time, days_of_week, is_active, sort_order"
+        "id, title, category_id, start_time, end_time, days_of_week, is_active, sort_order, reminder_minutes"
       )
       .eq("user_id", user.id)
       .eq("is_active", true)
@@ -105,11 +113,200 @@ const [accountDeleteError, setAccountDeleteError] = useState("");
     loadData();
   }, []);
 
+  useEffect(() => {
+  async function checkNotificationStatus() {
+    if (
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window) ||
+      !("Notification" in window)
+    ) {
+      setNotificationStatus("unsupported");
+      return;
+    }
+
+    if (Notification.permission === "denied") {
+      setNotificationStatus("denied");
+      return;
+    }
+
+    if (Notification.permission !== "granted") {
+      setNotificationStatus("disabled");
+      return;
+    }
+
+    try {
+      const registration = await navigator.serviceWorker.register("/sw.js");
+      const subscription = await registration.pushManager.getSubscription();
+
+      setNotificationStatus(subscription ? "enabled" : "disabled");
+    } catch (error) {
+      console.error("Could not check notification status:", error);
+      setNotificationStatus("disabled");
+    }
+  }
+
+  checkNotificationStatus();
+}, []);
+
+async function sendTestNotification() {
+  setNotificationMessage("Sending test notification...");
+
+  try {
+    const response = await fetch("/api/test-notification", {
+      method: "POST",
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        result.error || "Could not send test notification."
+      );
+    }
+
+    setNotificationMessage(
+      `Test sent successfully (${result.sent} device${
+        result.sent === 1 ? "" : "s"
+      }).`
+    );
+  } catch (error) {
+    console.error("Test notification failed:", error);
+
+    setNotificationMessage(
+      error instanceof Error
+        ? error.message
+        : "Could not send test notification."
+    );
+  }
+}
+
+async function enableNotifications() {
+  if (enablingNotifications) return;
+
+  setNotificationMessage("");
+
+  if (
+    !("serviceWorker" in navigator) ||
+    !("PushManager" in window) ||
+    !("Notification" in window)
+  ) {
+    setNotificationStatus("unsupported");
+    setNotificationMessage(
+      "Push notifications are not supported on this device or browser."
+    );
+    return;
+  }
+
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+
+  if (!publicKey) {
+    setNotificationMessage("LifeOS notification key is not configured.");
+    return;
+  }
+
+  setEnablingNotifications(true);
+
+  try {
+    const permission = await Notification.requestPermission();
+
+    if (permission !== "granted") {
+      setNotificationStatus(
+        permission === "denied" ? "denied" : "disabled"
+      );
+
+      setNotificationMessage(
+        permission === "denied"
+          ? "Notification permission was denied."
+          : "Notification permission was not enabled."
+      );
+
+      return;
+    }
+
+    const registration = await navigator.serviceWorker.register("/sw.js");
+
+    await navigator.serviceWorker.ready;
+
+    let subscription =
+      await registration.pushManager.getSubscription();
+
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+    }
+
+    const subscriptionJson = subscription.toJSON();
+
+    if (
+      !subscriptionJson.endpoint ||
+      !subscriptionJson.keys?.p256dh ||
+      !subscriptionJson.keys?.auth
+    ) {
+      throw new Error("Push subscription is incomplete.");
+    }
+
+    const supabase = createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new Error("You are not signed in.");
+    }
+
+    const timezone =
+      Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+    const { error } = await supabase
+      .from("push_subscriptions")
+      .upsert(
+        {
+          user_id: user.id,
+          endpoint: subscriptionJson.endpoint,
+          p256dh: subscriptionJson.keys.p256dh,
+          auth: subscriptionJson.keys.auth,
+          timezone,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: "endpoint",
+        }
+      );
+
+    if (error) {
+      throw error;
+    }
+
+    setNotificationStatus("enabled");
+    setNotificationMessage(
+      "Notifications are enabled on this device."
+    );
+  } catch (error) {
+    console.error("Could not enable notifications:", {
+  error,
+  message: error instanceof Error ? error.message : String(error),
+  name: error instanceof Error ? error.name : "Unknown",
+});
+
+    setNotificationMessage(
+      error instanceof Error
+        ? error.message
+        : "Could not enable notifications."
+    );
+  } finally {
+    setEnablingNotifications(false);
+  }
+}
+
   function resetForm() {
     setTitle("");
     setCategoryId("");
     setStartTime("");
     setEndTime("");
+    setReminderMinutes("");
     setSelectedDays([1, 2, 3, 4, 5]);
     setEditingId(null);
     setShowForm(false);
@@ -129,6 +326,9 @@ const [accountDeleteError, setAccountDeleteError] = useState("");
     setCategoryId(String(item.category_id));
     setStartTime(item.start_time.slice(0, 5));
     setEndTime(item.end_time ? item.end_time.slice(0, 5) : "");
+    setReminderMinutes(
+  item.reminder_minutes === null ? "" : String(item.reminder_minutes)
+);
     setSelectedDays(item.days_of_week);
     setMessage("");
     setShowForm(true);
@@ -168,7 +368,9 @@ const [accountDeleteError, setAccountDeleteError] = useState("");
       category_id: Number(categoryId),
       start_time: startTime,
       end_time: endTime || null,
-      days_of_week: selectedDays,
+reminder_minutes:
+  reminderMinutes === "" ? null : Number(reminderMinutes),
+days_of_week: selectedDays,
       is_active: true,
     };
 
@@ -248,6 +450,18 @@ const [accountDeleteError, setAccountDeleteError] = useState("");
     await loadData();
     setDeletingId(null);
   }
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+
+  const base64 = (base64String + padding)
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+
+  const rawData = window.atob(base64);
+
+  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+}
 
 async function deleteAccount() {
   if (deleteConfirmation !== "DELETE" || deletingAccount) return;
@@ -448,6 +662,28 @@ async function deleteAccount() {
                 </div>
               </div>
 
+<div className="mt-5 max-w-sm">
+  <label className="mb-2 block text-sm font-medium">
+    Reminder
+  </label>
+
+  <select
+    value={reminderMinutes}
+    onChange={(e) => setReminderMinutes(e.target.value)}
+    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-indigo-400"
+  >
+    <option value="">Off</option>
+    <option value="0">At start time</option>
+    <option value="5">5 minutes before</option>
+    <option value="10">10 minutes before</option>
+    <option value="15">15 minutes before</option>
+  </select>
+
+  <p className="mt-2 text-xs text-slate-500">
+    Optional. LifeOS will remind you before this activity starts.
+  </p>
+</div>
+
               <div className="mt-5">
                 <p className="mb-3 text-sm font-medium">Repeat on</p>
 
@@ -578,6 +814,74 @@ async function deleteAccount() {
             )}
           </div>
                   </section>
+
+<section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+  <h2 className="text-lg font-semibold">Notifications</h2>
+
+  <p className="mt-1 text-sm text-slate-500">
+    Receive reminders for activities where you have turned on a reminder.
+  </p>
+
+  <div className="mt-5 flex flex-wrap items-center gap-3">
+    {notificationStatus === "enabled" ? (
+  <div className="flex flex-wrap items-center gap-3">
+    <div className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+      ✓ Notifications enabled on this device
+    </div>
+
+    <button
+      type="button"
+      onClick={enableNotifications}
+      disabled={enablingNotifications}
+      className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+    >
+      {enablingNotifications ? "Syncing..." : "Sync device"}
+    </button>
+    <button
+  type="button"
+  onClick={sendTestNotification}
+  className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+>
+  Send Test Notification
+</button>
+  </div>
+) : (
+      <button
+        type="button"
+        onClick={enableNotifications}
+        disabled={
+          enablingNotifications ||
+          notificationStatus === "unsupported" ||
+          notificationStatus === "denied"
+        }
+        className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {enablingNotifications
+          ? "Enabling..."
+          : "Enable Notifications"}
+      </button>
+    )}
+  </div>
+
+  {notificationStatus === "denied" && (
+    <p className="mt-3 text-sm text-rose-600">
+      Notifications are blocked for LifeOS. Allow notifications in your
+      browser or device settings, then return here.
+    </p>
+  )}
+
+  {notificationStatus === "unsupported" && (
+    <p className="mt-3 text-sm text-amber-600">
+      Push notifications are not supported in this browser.
+    </p>
+  )}
+
+  {notificationMessage && (
+    <p className="mt-3 text-sm text-slate-600">
+      {notificationMessage}
+    </p>
+  )}
+</section>
 
           <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold">Account</h2>
