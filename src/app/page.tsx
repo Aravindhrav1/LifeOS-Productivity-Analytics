@@ -26,6 +26,7 @@ export default function Home() {
   const [userName, setUserName] = useState("");
   const [routine, setRoutine] = useState<RoutineItem[]>([]);
   const [routineLoading, setRoutineLoading] = useState(true);
+  const [selectedDateOffset, setSelectedDateOffset] = useState(0);
   const [yesterdayScore, setYesterdayScore] = useState<number | null>(null);
 
   const [yesterdayLostMinutes, setYesterdayLostMinutes] =
@@ -316,8 +317,11 @@ setUserName(displayName);
       //
       // LifeOS:
       // Monday = 1 ... Sunday = 7
-      const jsDay = new Date().getDay();
-      const todayDay = jsDay === 0 ? 7 : jsDay;
+     const selectedDate = new Date();
+selectedDate.setDate(selectedDate.getDate() + selectedDateOffset);
+
+const jsDay = selectedDate.getDay();
+const todayDay = jsDay === 0 ? 7 : jsDay;
 
       // --------------------------------------------------
       // 1. Load today's reusable routine template
@@ -353,12 +357,13 @@ setUserName(displayName);
       // --------------------------------------------------
 
       const currentDate = new Date();
+currentDate.setDate(currentDate.getDate() + selectedDateOffset);
 
-      const activityDate = [
-        currentDate.getFullYear(),
-        String(currentDate.getMonth() + 1).padStart(2, "0"),
-        String(currentDate.getDate()).padStart(2, "0"),
-      ].join("-");
+const activityDate = [
+  currentDate.getFullYear(),
+  String(currentDate.getMonth() + 1).padStart(2, "0"),
+  String(currentDate.getDate()).padStart(2, "0"),
+].join("-");
 
       console.log("Today's date:", activityDate);
       console.log("Routine items found:", routineData?.length ?? 0);
@@ -408,6 +413,36 @@ setUserName(displayName);
           );
         }
       }
+
+// --------------------------------------------------
+// Sync TODAY'S still-planned activities with Settings
+// --------------------------------------------------
+
+if (
+  selectedDateOffset === 0 &&
+  routineData &&
+  routineData.length > 0
+) {
+  for (const item of routineData) {
+    const { error: syncError } = await supabase
+      .from("daily_activities")
+      .update({
+        category_id: item.category_id,
+        title: item.title,
+        planned_start: item.start_time,
+        planned_end: item.end_time,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", user.id)
+      .eq("activity_date", activityDate)
+      .eq("routine_item_id", item.id)
+      .eq("status", "planned");
+
+    if (syncError) {
+      console.error("Error syncing today's routine:", syncError);
+    }
+  }
+}
 
       // --------------------------------------------------
       // 4. Load TODAY'S permanent records
@@ -677,8 +712,8 @@ if (reflectionError) {
       setRoutineLoading(false);
     }
 
-    loadTodayRoutine();
-  }, []);
+   loadTodayRoutine();
+}, [selectedDateOffset]);
 
   // --------------------------------------------------
   // Re-open a completed activity
@@ -766,12 +801,13 @@ async function saveDailyReflection() {
     }
 
     const currentDate = new Date();
+currentDate.setDate(currentDate.getDate() + selectedDateOffset);
 
-    const reflectionDate = [
-      currentDate.getFullYear(),
-      String(currentDate.getMonth() + 1).padStart(2, "0"),
-      String(currentDate.getDate()).padStart(2, "0"),
-    ].join("-");
+const reflectionDate = [
+  currentDate.getFullYear(),
+  String(currentDate.getMonth() + 1).padStart(2, "0"),
+  String(currentDate.getDate()).padStart(2, "0"),
+].join("-");
 
     const { error } = await supabase
       .from("daily_reflections")
@@ -1093,12 +1129,13 @@ async function saveNewActivity() {
 
     // Create today's local YYYY-MM-DD date.
     const currentDate = new Date();
+currentDate.setDate(currentDate.getDate() + selectedDateOffset);
 
-    const activityDate = [
-      currentDate.getFullYear(),
-      String(currentDate.getMonth() + 1).padStart(2, "0"),
-      String(currentDate.getDate()).padStart(2, "0"),
-    ].join("-");
+const activityDate = [
+  currentDate.getFullYear(),
+  String(currentDate.getMonth() + 1).padStart(2, "0"),
+  String(currentDate.getDate()).padStart(2, "0"),
+].join("-");
 
     // Store these before resetting the form.
     const title = newActivityTitle.trim();
@@ -1230,6 +1267,28 @@ async function saveNewActivity() {
             </button>
           </header>
 
+{/* Date Selector */}
+<div className="mb-6 flex flex-wrap gap-2">
+  {[
+    { label: "2 Days Ago", value: -2 },
+    { label: "Yesterday", value: -1 },
+    { label: "Today", value: 0 },
+  ].map((day) => (
+    <button
+      key={day.value}
+      type="button"
+      onClick={() => setSelectedDateOffset(day.value)}
+      className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+        selectedDateOffset === day.value
+          ? "bg-indigo-600 text-white"
+          : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+      }`}
+    >
+      {day.label}
+    </button>
+  ))}
+</div>
+
           {/* KPI Cards */}
 
           <div className="mb-8 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
@@ -1331,7 +1390,11 @@ async function saveNewActivity() {
               <div className="flex items-center justify-between border-b border-slate-100 p-5">
                 <div>
                   <h3 className="font-semibold">
-                    Today&apos;s timeline
+                    {selectedDateOffset === 0
+  ? "Today's timeline"
+  : selectedDateOffset === -1
+  ? "Yesterday's timeline"
+  : "2 days ago"}
                   </h3>
 
                   <p className="mt-1 text-sm text-slate-400">
