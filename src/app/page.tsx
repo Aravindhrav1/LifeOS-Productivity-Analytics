@@ -693,6 +693,14 @@ if (weeklyError) {
 // 8. Load today's reflection
 // --------------------------------------------------
 
+// Clear the previous day's reflection before loading the selected date.
+setReflectionMood(null);
+setReflectionText("");
+setReflectionGratitude("");
+setReflectionHighlight("");
+setReflectionImprovement("");
+setReflectionSaved(false);
+
 const { data: todayReflection, error: reflectionError } =
   await supabase
     .from("daily_reflections")
