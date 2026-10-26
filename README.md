@@ -7,7 +7,7 @@ LifeOS was developed as an end-to-end **Business Analysis and Data Analytics por
 ### Live Application
 
 **Live Demo:** https://get-lifeos.vercel.app/
-
+ 
 ---
 
 ## Project Overview
