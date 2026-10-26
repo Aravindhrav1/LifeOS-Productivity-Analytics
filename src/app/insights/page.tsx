@@ -5,10 +5,10 @@ import { createClient } from "@/lib/client";
 import LifeOSSidebar from "@/components/LifeOSSidebar";
 
 type Activity = {
-  id: number;
+  id: number | string;
   activity_date: string;
-  routine_item_id: number | null;
-  category_id: number;
+  routine_item_id: number | string | null;
+  category_id: number | string | null;
   title: string;
   planned_start: string | null;
   planned_end: string | null;
@@ -29,19 +29,15 @@ type Activity = {
     | null;
 };
 
-type Reflection = {
-  id: number;
-  reflection_date: string;
-  mood: number | null;
-};
-
 type DailyMetric = {
   date: string;
-  dailyScore: number;
-  adherence: number;
-  buildMinutes: number;
-  lostMinutes: number;
-  mood: number | null;
+  dailyScore: number | null;
+  adherence: number | null;
+};
+
+type LostDriver = {
+  title: string;
+  minutes: number;
 };
 
 const categoryNames = [
@@ -57,6 +53,7 @@ const buildFocusNames = [
   "Business",
   "Projects",
   "Learning",
+  "Unassigned",
 ];
 
 function getCategoryName(activity: Activity) {
@@ -101,7 +98,6 @@ function getDurationMinutes(
 
   let difference = endMinutes - startMinutes;
 
-  // Handles overnight activities such as 23:00 → 07:00.
   if (difference < 0) {
     difference += 24 * 60;
   }
@@ -125,6 +121,10 @@ function formatMinutes(minutes: number) {
   return `${mins}m`;
 }
 
+function formatHours(minutes: number) {
+  return `${(minutes / 60).toFixed(1)}h`;
+}
+
 function formatShortDate(date: string) {
   return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
@@ -134,13 +134,14 @@ function formatShortDate(date: string) {
 
 function getDateString(date: Date) {
   const year = date.getFullYear();
+
   const month = String(
     date.getMonth() + 1
   ).padStart(2, "0");
-  const day = String(date.getDate()).padStart(
-    2,
-    "0"
-  );
+
+  const day = String(
+    date.getDate()
+  ).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
 }
@@ -159,8 +160,11 @@ function MetricBar({
   const width =
     maximum > 0
       ? Math.max(
-          2,
-          Math.min(100, (value / maximum) * 100)
+          value > 0 ? 2 : 0,
+          Math.min(
+            100,
+            (value / maximum) * 100
+          )
         )
       : 0;
 
@@ -179,23 +183,304 @@ function MetricBar({
       <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
         <div
           className="h-full rounded-full bg-indigo-500 transition-all"
-          style={{ width: `${width}%` }}
+          style={{
+            width: `${width}%`,
+          }}
         />
       </div>
     </div>
   );
 }
 
+function KpiCard({
+  title,
+  value,
+  note,
+}: {
+  title: string;
+  value: string;
+  note: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-sm text-slate-500">
+        {title}
+      </p>
+
+      <p className="mt-2 text-3xl font-bold text-slate-900">
+        {value}
+      </p>
+
+      <p className="mt-1 text-xs text-slate-400">
+        {note}
+      </p>
+    </div>
+  );
+}
+
+/* ======================================================
+   PERFORMANCE LINE CHART
+====================================================== */
+
+function PerformanceChart({
+  metrics,
+  periodDays,
+}: {
+  metrics: DailyMetric[];
+  periodDays: 7 | 30;
+}) {
+  const width =
+    periodDays === 30 ? 1200 : 900;
+
+  const height = 300;
+
+  const paddingLeft = 48;
+  const paddingRight = 25;
+  const paddingTop = 25;
+  const paddingBottom = 45;
+
+  const chartWidth =
+    width - paddingLeft - paddingRight;
+
+  const chartHeight =
+    height - paddingTop - paddingBottom;
+
+  function xPosition(index: number) {
+    if (metrics.length <= 1) {
+      return paddingLeft;
+    }
+
+    return (
+      paddingLeft +
+      (index / (metrics.length - 1)) *
+        chartWidth
+    );
+  }
+
+  function yPosition(value: number) {
+    return (
+      paddingTop +
+      chartHeight -
+      (value / 100) * chartHeight
+    );
+  }
+
+  function buildSegments(
+    key: "dailyScore" | "adherence"
+  ) {
+    const segments: string[][] = [];
+    let current: string[] = [];
+
+    metrics.forEach((metric, index) => {
+      const value = metric[key];
+
+      if (value === null) {
+        if (current.length > 0) {
+          segments.push(current);
+          current = [];
+        }
+
+        return;
+      }
+
+      current.push(
+        `${xPosition(index)},${yPosition(
+          value
+        )}`
+      );
+    });
+
+    if (current.length > 0) {
+      segments.push(current);
+    }
+
+    return segments;
+  }
+
+  const scoreSegments =
+    buildSegments("dailyScore");
+
+  const adherenceSegments =
+    buildSegments("adherence");
+
+  return (
+    <div className="mt-6 overflow-x-auto">
+      <div
+        style={{
+          minWidth:
+            periodDays === 30
+              ? "1100px"
+              : "700px",
+        }}
+      >
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="h-[300px] w-full"
+          role="img"
+          aria-label="Daily Score and Plan Adherence trend"
+        >
+          {/* Horizontal grid */}
+
+          {[0, 25, 50, 75, 100].map(
+            (value) => {
+              const y = yPosition(value);
+
+              return (
+                <g key={value}>
+                  <line
+                    x1={paddingLeft}
+                    y1={y}
+                    x2={
+                      width - paddingRight
+                    }
+                    y2={y}
+                    stroke="#e2e8f0"
+                    strokeWidth="1"
+                  />
+
+                  <text
+                    x={paddingLeft - 10}
+                    y={y + 4}
+                    textAnchor="end"
+                    fontSize="11"
+                    fill="#94a3b8"
+                  >
+                    {value}%
+                  </text>
+                </g>
+              );
+            }
+          )}
+
+          {/* Daily Score */}
+
+          {scoreSegments.map(
+            (segment, index) => (
+              <polyline
+                key={`score-${index}`}
+                points={segment.join(" ")}
+                fill="none"
+                stroke="#6366f1"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )
+          )}
+
+          {/* Plan Adherence */}
+
+          {adherenceSegments.map(
+            (segment, index) => (
+              <polyline
+                key={`adherence-${index}`}
+                points={segment.join(" ")}
+                fill="none"
+                stroke="#94a3b8"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )
+          )}
+
+          {/* Data points */}
+
+          {metrics.map((metric, index) => {
+            const x = xPosition(index);
+
+            return (
+              <g key={metric.date}>
+                {metric.dailyScore !==
+                  null && (
+                  <circle
+                    cx={x}
+                    cy={yPosition(
+                      metric.dailyScore
+                    )}
+                    r="5"
+                    fill="#6366f1"
+                  >
+                    <title>
+                      {`${formatShortDate(
+                        metric.date
+                      )} — Daily Score: ${metric.dailyScore.toFixed(
+                        0
+                      )}%`}
+                    </title>
+                  </circle>
+                )}
+
+                {metric.adherence !==
+                  null && (
+                  <circle
+                    cx={x}
+                    cy={yPosition(
+                      metric.adherence
+                    )}
+                    r="5"
+                    fill="#94a3b8"
+                  >
+                    <title>
+                      {`${formatShortDate(
+                        metric.date
+                      )} — Plan Adherence: ${metric.adherence.toFixed(
+                        0
+                      )}%`}
+                    </title>
+                  </circle>
+                )}
+
+                {(periodDays === 7 ||
+                  index % 3 === 0 ||
+                  index ===
+                    metrics.length - 1) && (
+                  <text
+                    x={x}
+                    y={height - 12}
+                    textAnchor="middle"
+                    fontSize="10"
+                    fill="#94a3b8"
+                  >
+                    {formatShortDate(
+                      metric.date
+                    )}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-indigo-500" />
+            Daily Score
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-slate-400" />
+            Plan Adherence
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ======================================================
+   PAGE
+====================================================== */
+
 export default function InsightsPage() {
-  const [activities, setActivities] = useState<
-    Activity[]
-  >([]);
+  const [activities, setActivities] =
+    useState<Activity[]>([]);
 
-  const [reflections, setReflections] = useState<
-    Reflection[]
-  >([]);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [loading, setLoading] = useState(true);
+  const [periodDays, setPeriodDays] =
+    useState<7 | 30>(7);
 
   useEffect(() => {
     async function loadInsights() {
@@ -213,18 +498,18 @@ export default function InsightsPage() {
       const today = new Date();
       const startDate = new Date();
 
-      startDate.setDate(today.getDate() - 29);
+      startDate.setDate(
+        today.getDate() - 29
+      );
 
       const startDateString =
         getDateString(startDate);
 
-      const todayString = getDateString(today);
+      const todayString =
+        getDateString(today);
 
-      const [
-        activityResult,
-        reflectionResult,
-      ] = await Promise.all([
-        supabase
+      const { data, error } =
+        await supabase
           .from("daily_activities")
           .select(`
             id,
@@ -249,53 +534,23 @@ export default function InsightsPage() {
             "activity_date",
             startDateString
           )
-          .lte("activity_date", todayString)
-          .order("activity_date", {
-            ascending: true,
-          }),
-
-        supabase
-          .from("daily_reflections")
-          .select(`
-            id,
-            reflection_date,
-            mood
-          `)
-          .eq("user_id", user.id)
-          .gte(
-            "reflection_date",
-            startDateString
-          )
           .lte(
-            "reflection_date",
+            "activity_date",
             todayString
           )
-          .order("reflection_date", {
+          .order("activity_date", {
             ascending: true,
-          }),
-      ]);
+          });
 
-      if (activityResult.error) {
+      if (error) {
         console.error(
           "Error loading insight activities:",
-          activityResult.error
-        );
-      }
-
-      if (reflectionResult.error) {
-        console.error(
-          "Error loading insight reflections:",
-          reflectionResult.error
+          error
         );
       }
 
       setActivities(
-        (activityResult.data ?? []) as Activity[]
-      );
-
-      setReflections(
-        (reflectionResult.data ??
-          []) as Reflection[]
+        (data ?? []) as unknown as Activity[]
       );
 
       setLoading(false);
@@ -304,259 +559,149 @@ export default function InsightsPage() {
     loadInsights();
   }, []);
 
+  /* ====================================================
+     ANALYTICS
+  ==================================================== */
+
   const analytics = useMemo(() => {
     const today = new Date();
 
-    const last7Dates: string[] = [];
+    const selectedDates: string[] = [];
 
-    for (let index = 6; index >= 0; index--) {
+    for (
+      let index = periodDays - 1;
+      index >= 0;
+      index--
+    ) {
       const date = new Date(today);
 
-      date.setDate(today.getDate() - index);
+      date.setDate(
+        today.getDate() - index
+      );
 
-      last7Dates.push(getDateString(date));
+      selectedDates.push(
+        getDateString(date)
+      );
     }
 
-    const reflectionMoodByDate = new Map<
-      string,
-      number | null
-    >();
+    const selectedDateSet =
+      new Set(selectedDates);
 
-    reflections.forEach((reflection) => {
-      reflectionMoodByDate.set(
-        reflection.reflection_date,
-        reflection.mood
-      );
-    });
-
-    const dailyMetrics: DailyMetric[] =
-      last7Dates.map((date) => {
-        const dayActivities = activities.filter(
-          (activity) =>
-            activity.activity_date === date
-        );
-
-        // Only routine-based activities are part
-        // of the Daily Score and Plan Adherence.
-        const plannedActivities =
-          dayActivities.filter(
-            (activity) =>
-              activity.routine_item_id !== null
-          );
-
-        // Only activities that have reached an
-        // outcome are scored.
-        // Future/planned activities are ignored.
-        const scoredPlannedActivities =
-          plannedActivities.filter(
-            (activity) =>
-              activity.status === "completed" ||
-              activity.status === "lost"
-          );
-
-        const completedPlannedActivities =
-          scoredPlannedActivities.filter(
-            (activity) =>
-              activity.status === "completed"
-          );
-
-        const dailyScore =
-          scoredPlannedActivities.length > 0
-            ? Math.round(
-                (completedPlannedActivities.length /
-                  scoredPlannedActivities.length) *
-                  100
-              )
-            : 0;
-
-        // Plan Adherence only evaluates activities
-        // that were actually completed.
-        const asPlannedCompleted =
-          completedPlannedActivities.filter(
-            (activity) =>
-              activity.as_planned === true
-          );
-
-        const adherence =
-          completedPlannedActivities.length > 0
-            ? Math.round(
-                (asPlannedCompleted.length /
-                  completedPlannedActivities.length) *
-                  100
-              )
-            : 0;
-
-        let buildMinutes = 0;
-        let lostMinutes = 0;
-
-        dayActivities.forEach((activity) => {
-          const category =
-            getCategoryName(activity);
-
-          // A planned activity explicitly marked Lost
-          // keeps its original category in Supabase.
-          // Its planned duration therefore belongs to Lost.
-          if (
-            activity.status === "lost" &&
-            activity.routine_item_id !== null
-          ) {
-            lostMinutes += getDurationMinutes(
-              activity.planned_start,
-              activity.planned_end
-            );
-
-            return;
-          }
-
-          if (activity.status !== "completed") {
-            return;
-          }
-
-          const minutes = getDurationMinutes(
-            activity.actual_start ??
-              activity.planned_start,
-            activity.actual_end ??
-              activity.planned_end
-          );
-
-          if (category === "Build") {
-            buildMinutes += minutes;
-          }
-
-          // Supports manually logged Lost activities.
-          if (category === "Lost") {
-            lostMinutes += minutes;
-          }
-        });
-
-        return {
-          date,
-          dailyScore,
-          adherence,
-          buildMinutes,
-          lostMinutes,
-          mood:
-            reflectionMoodByDate.get(date) ??
-            null,
-        };
-      });
-
-    // Only include days where an activity actually
-    // reached an outcome when calculating Avg Score.
-    const daysWithScoredActivity =
-      dailyMetrics.filter((metric) =>
-        activities.some(
-          (activity) =>
-            activity.activity_date ===
-              metric.date &&
-            activity.routine_item_id !== null &&
-            (activity.status === "completed" ||
-              activity.status === "lost")
+    const selectedActivities =
+      activities.filter((activity) =>
+        selectedDateSet.has(
+          activity.activity_date
         )
       );
 
-    const averageDailyScore =
-      daysWithScoredActivity.length > 0
-        ? Math.round(
-            daysWithScoredActivity.reduce(
-              (total, metric) =>
-                total + metric.dailyScore,
-              0
-            ) /
-              daysWithScoredActivity.length
-          )
+    /* -----------------------------------------------
+       DAILY SCORE / ADHERENCE
+    ----------------------------------------------- */
+
+    const resolvedRoutine =
+      selectedActivities.filter(
+        (activity) =>
+          activity.routine_item_id !==
+            null &&
+          (activity.status ===
+            "completed" ||
+            activity.status === "lost")
+      );
+
+    const completedRoutine =
+      resolvedRoutine.filter(
+        (activity) =>
+          activity.status ===
+          "completed"
+      );
+
+    const completedAsPlanned =
+      completedRoutine.filter(
+        (activity) =>
+          activity.as_planned === true
+      );
+
+    const dailyScore =
+      resolvedRoutine.length > 0
+        ? (completedRoutine.length /
+            resolvedRoutine.length) *
+          100
         : 0;
 
-    // Plan Adherence only averages days where
-    // at least one planned activity was completed.
-    const daysWithCompletedPlanned =
-      dailyMetrics.filter((metric) => {
-        return activities.some(
-          (activity) =>
-            activity.activity_date ===
-              metric.date &&
-            activity.routine_item_id !== null &&
-            activity.status === "completed"
-        );
-      });
-
-    const averageAdherence =
-      daysWithCompletedPlanned.length > 0
-        ? Math.round(
-            daysWithCompletedPlanned.reduce(
-              (total, metric) =>
-                total + metric.adherence,
-              0
-            ) /
-              daysWithCompletedPlanned.length
-          )
+    const planAdherence =
+      completedRoutine.length > 0
+        ? (completedAsPlanned.length /
+            completedRoutine.length) *
+          100
         : 0;
 
-    const weeklyBuildMinutes =
-      dailyMetrics.reduce(
-        (total, metric) =>
-          total + metric.buildMinutes,
-        0
-      );
+    /* -----------------------------------------------
+       TIME METRICS
+    ----------------------------------------------- */
 
-    const weeklyLostMinutes =
-      dailyMetrics.reduce(
-        (total, metric) =>
-          total + metric.lostMinutes,
-        0
-      );
+    let buildMinutes = 0;
 
-    const moods = dailyMetrics
-      .map((metric) => metric.mood)
-      .filter(
-        (mood): mood is number =>
-          mood !== null
-      );
+    let completedMinutes = 0;
 
-    const averageMood =
-      moods.length > 0
-        ? (
-            moods.reduce(
-              (total, mood) =>
-                total + mood,
-              0
-            ) / moods.length
-          ).toFixed(1)
-        : "0.0";
+    // IMPORTANT:
+    // This contains ONLY planned routine
+    // activities that were marked Lost.
+    let plannedRoutineLostMinutes = 0;
+
+    let resolvedPlannedMinutes = 0;
 
     const categoryMinutes: Record<
       string,
       number
     > = {};
 
-    categoryNames.forEach((category) => {
-      categoryMinutes[category] = 0;
-    });
+    categoryNames.forEach(
+      (category) => {
+        categoryMinutes[category] = 0;
+      }
+    );
 
     const buildFocusMinutes: Record<
       string,
       number
     > = {};
 
-    buildFocusNames.forEach((focus) => {
-      buildFocusMinutes[focus] = 0;
-    });
+    buildFocusNames.forEach(
+      (focus) => {
+        buildFocusMinutes[focus] = 0;
+      }
+    );
 
-    const last7Set = new Set(last7Dates);
+    const lostDriverMap: Record<
+      string,
+      number
+    > = {};
 
-    activities
-      .filter((activity) =>
-        last7Set.has(activity.activity_date)
-      )
-      .forEach((activity) => {
+    selectedActivities.forEach(
+      (activity) => {
         const category =
           getCategoryName(activity);
 
-        // Planned routine item marked Lost.
-        // Do not add it to its original category.
+        // Resolved planned routine time
+        if (
+          activity.routine_item_id !==
+            null &&
+          (activity.status ===
+            "completed" ||
+            activity.status === "lost")
+        ) {
+          resolvedPlannedMinutes +=
+            getDurationMinutes(
+              activity.planned_start,
+              activity.planned_end
+            );
+        }
+
+        // Planned routine marked Lost
         if (
           activity.status === "lost" &&
-          activity.routine_item_id !== null
+          activity.routine_item_id !==
+            null
         ) {
           const minutes =
             getDurationMinutes(
@@ -564,15 +709,29 @@ export default function InsightsPage() {
               activity.planned_end
             );
 
-          categoryMinutes["Lost"] += minutes;
+          plannedRoutineLostMinutes +=
+            minutes;
+
+          // Lost goes to Lost allocation,
+          // not the original category.
+          categoryMinutes["Lost"] +=
+            minutes;
+
+          lostDriverMap[
+            activity.title
+          ] =
+            (lostDriverMap[
+              activity.title
+            ] ?? 0) + minutes;
 
           return;
         }
 
-        // Planned activities with no outcome do not
-        // contribute to actual time allocation.
+        // Only completed activities
+        // contribute actual completed time.
         if (
-          activity.status !== "completed"
+          activity.status !==
+          "completed"
         ) {
           return;
         }
@@ -585,48 +744,173 @@ export default function InsightsPage() {
               activity.planned_end
           );
 
-        if (category in categoryMinutes) {
-          categoryMinutes[category] +=
-            minutes;
-        }
+        completedMinutes += minutes;
 
         if (
-          category === "Build" &&
-          activity.build_focus &&
-          activity.build_focus in
-            buildFocusMinutes
+          category in categoryMinutes
         ) {
-          buildFocusMinutes[
-            activity.build_focus
+          categoryMinutes[
+            category
           ] += minutes;
         }
+
+        if (category === "Build") {
+          buildMinutes += minutes;
+
+          const validFocus =
+            activity.build_focus &&
+            [
+              "Career",
+              "Business",
+              "Projects",
+              "Learning",
+            ].includes(
+              activity.build_focus
+            )
+              ? activity.build_focus
+              : "Unassigned";
+
+          buildFocusMinutes[
+            validFocus
+          ] += minutes;
+        }
+      }
+    );
+
+    const buildPercent =
+      completedMinutes > 0
+        ? (buildMinutes /
+            completedMinutes) *
+          100
+        : 0;
+
+    const lostTimePercent =
+      resolvedPlannedMinutes > 0
+        ? (plannedRoutineLostMinutes /
+            resolvedPlannedMinutes) *
+          100
+        : 0;
+
+    const buildToLostRatio =
+      plannedRoutineLostMinutes > 0
+        ? buildMinutes /
+          plannedRoutineLostMinutes
+        : null;
+
+    const lostDrivers: LostDriver[] =
+      Object.entries(lostDriverMap)
+        .map(
+          ([title, minutes]) => ({
+            title,
+            minutes,
+          })
+        )
+        .sort(
+          (a, b) =>
+            b.minutes - a.minutes
+        )
+        .slice(0, 5);
+
+    /* -----------------------------------------------
+       DAILY PERFORMANCE TREND
+    ----------------------------------------------- */
+
+    const dailyMetrics: DailyMetric[] =
+      selectedDates.map((date) => {
+        const dayActivities =
+          selectedActivities.filter(
+            (activity) =>
+              activity.activity_date ===
+              date
+          );
+
+        const dayRoutine =
+          dayActivities.filter(
+            (activity) =>
+              activity.routine_item_id !==
+                null &&
+              (activity.status ===
+                "completed" ||
+                activity.status ===
+                  "lost")
+          );
+
+        const dayCompleted =
+          dayRoutine.filter(
+            (activity) =>
+              activity.status ===
+              "completed"
+          );
+
+        const dayAsPlanned =
+          dayCompleted.filter(
+            (activity) =>
+              activity.as_planned === true
+          );
+
+        const dayDailyScore =
+          dayRoutine.length > 0
+            ? (dayCompleted.length /
+                dayRoutine.length) *
+              100
+            : null;
+
+        const dayAdherence =
+          dayCompleted.length > 0
+            ? (dayAsPlanned.length /
+                dayCompleted.length) *
+              100
+            : null;
+
+        return {
+          date,
+          dailyScore:
+            dayDailyScore,
+          adherence:
+            dayAdherence,
+        };
       });
 
     return {
-      dailyMetrics,
-      averageDailyScore,
-      averageAdherence,
-      weeklyBuildMinutes,
-      weeklyLostMinutes,
-      averageMood,
+      dailyScore,
+      planAdherence,
+      buildMinutes,
+      completedMinutes,
+      plannedRoutineLostMinutes,
+      resolvedPlannedMinutes,
+      buildPercent,
+      lostTimePercent,
+      buildToLostRatio,
       categoryMinutes,
       buildFocusMinutes,
+      lostDrivers,
+      dailyMetrics,
     };
-  }, [activities, reflections]);
+  }, [activities, periodDays]);
 
-  const maximumCategoryMinutes = Math.max(
-    ...Object.values(
-      analytics.categoryMinutes
-    ),
-    1
-  );
+  const maximumCategoryMinutes =
+    Math.max(
+      ...Object.values(
+        analytics.categoryMinutes
+      ),
+      1
+    );
 
-  const maximumBuildFocusMinutes = Math.max(
-    ...Object.values(
-      analytics.buildFocusMinutes
-    ),
-    1
-  );
+  const maximumBuildFocusMinutes =
+    Math.max(
+      ...Object.values(
+        analytics.buildFocusMinutes
+      ),
+      1
+    );
+
+  const maximumLostDriverMinutes =
+    Math.max(
+      ...analytics.lostDrivers.map(
+        (driver) => driver.minutes
+      ),
+      1
+    );
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
@@ -634,8 +918,11 @@ export default function InsightsPage() {
 
       <section className="min-w-0 p-4 sm:p-6 lg:ml-64 lg:p-10">
         <div className="mx-auto max-w-7xl">
+
           {/* HEADER */}
-          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+          <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-indigo-600">
                 Insights
@@ -645,229 +932,149 @@ export default function InsightsPage() {
                 Turn your days into data.
               </h1>
 
-              <p className="mt-2 text-slate-500">
-                Understand how you spend your
-                time, follow your plan and invest
-                in your future.
+              <p className="mt-2 max-w-2xl text-slate-500">
+                Understand your execution,
+                schedule adherence, time
+                allocation and investment in
+                your future.
               </p>
+            </div>
+
+            {/* Period */}
+
+            <div className="flex w-fit rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+
+              <button
+                type="button"
+                onClick={() =>
+                  setPeriodDays(7)
+                }
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                  periodDays === 7
+                    ? "bg-indigo-600 text-white"
+                    : "text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                7 Days
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setPeriodDays(30)
+                }
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                  periodDays === 30
+                    ? "bg-indigo-600 text-white"
+                    : "text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                30 Days
+              </button>
+
             </div>
           </div>
 
           {loading ? (
+
             <div className="rounded-2xl border border-slate-200 bg-white p-8">
               Loading insights...
             </div>
+
           ) : (
+
             <>
               {/* KPI CARDS */}
 
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-sm text-slate-500">
-                    Avg Daily Score
-                  </p>
 
-                  <p className="mt-2 text-3xl font-bold text-slate-900">
-                    {analytics.averageDailyScore}%
-                  </p>
+                <KpiCard
+                  title="Daily Score"
+                  value={`${analytics.dailyScore.toFixed(
+                    1
+                  )}%`}
+                  note={`${periodDays}-day period`}
+                />
 
-                  <p className="mt-1 text-xs text-slate-400">
-                    Last 7 days
-                  </p>
-                </div>
+                <KpiCard
+                  title="Plan Adherence"
+                  value={`${analytics.planAdherence.toFixed(
+                    1
+                  )}%`}
+                  note={`${periodDays}-day period`}
+                />
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-sm text-slate-500">
-                    Plan Adherence
-                  </p>
+                <KpiCard
+                  title="Build Hours"
+                  value={formatHours(
+                    analytics.buildMinutes
+                  )}
+                  note={`${periodDays}-day period`}
+                />
 
-                  <p className="mt-2 text-3xl font-bold text-slate-900">
-                    {analytics.averageAdherence}%
-                  </p>
+                <KpiCard
+                  title="Build %"
+                  value={`${analytics.buildPercent.toFixed(
+                    1
+                  )}%`}
+                  note="Share of completed time"
+                />
 
-                  <p className="mt-1 text-xs text-slate-400">
-                    7-day average
-                  </p>
-                </div>
+                <KpiCard
+                  title="Lost Time"
+                  value={`${analytics.lostTimePercent.toFixed(
+                    1
+                  )}%`}
+                  note={`${formatMinutes(
+                    analytics.plannedRoutineLostMinutes
+                  )} planned time lost`}
+                />
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-sm text-slate-500">
-                    Future Building
-                  </p>
-
-                  <p className="mt-2 text-3xl font-bold text-slate-900">
-                    {formatMinutes(
-                      analytics.weeklyBuildMinutes
-                    )}
-                  </p>
-
-                  <p className="mt-1 text-xs text-slate-400">
-                    Last 7 days
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-sm text-slate-500">
-                    Lost Time
-                  </p>
-
-                  <p className="mt-2 text-3xl font-bold text-slate-900">
-                    {formatMinutes(
-                      analytics.weeklyLostMinutes
-                    )}
-                  </p>
-
-                  <p className="mt-1 text-xs text-slate-400">
-                    Last 7 days
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-sm text-slate-500">
-                    Average Mood
-                  </p>
-
-                  <p className="mt-2 text-3xl font-bold text-slate-900">
-                    {analytics.averageMood}
-                    <span className="ml-1 text-base font-normal text-slate-400">
-                      / 5
-                    </span>
-                  </p>
-
-                  <p className="mt-1 text-xs text-slate-400">
-                    Journal entries
-                  </p>
-                </div>
               </div>
 
-              {/* 7 DAY PERFORMANCE */}
+              {/* PERFORMANCE TREND */}
 
               <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">
-                    7-Day Performance
+                    Performance Trend
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-400">
-                    Daily Score, adherence, Build
-                    time, Lost time and mood.
+                    Daily Score and Plan
+                    Adherence across the selected
+                    period.
                   </p>
                 </div>
 
-                <div className="mt-6 overflow-x-auto">
-                  <div className="min-w-[750px]">
-                    <div className="grid grid-cols-7 gap-3">
-                      {analytics.dailyMetrics.map(
-                        (metric) => (
-                          <div
-                            key={metric.date}
-                            className="rounded-xl border border-slate-100 bg-slate-50 p-4"
-                          >
-                            <p className="text-xs font-medium text-slate-400">
-                              {formatShortDate(
-                                metric.date
-                              )}
-                            </p>
+                <PerformanceChart
+                  metrics={
+                    analytics.dailyMetrics
+                  }
+                  periodDays={periodDays}
+                />
 
-                            <div className="mt-4">
-                              <p className="text-xs text-slate-400">
-                                Score
-                              </p>
-
-                              <p className="mt-1 text-xl font-bold text-slate-900">
-                                {
-                                  metric.dailyScore
-                                }
-                                %
-                              </p>
-                            </div>
-
-                            <div className="mt-4">
-                              <p className="text-xs text-slate-400">
-                                Adherence
-                              </p>
-
-                              <p className="mt-1 font-semibold text-slate-700">
-                                {
-                                  metric.adherence
-                                }
-                                %
-                              </p>
-                            </div>
-
-                            <div className="mt-4">
-                              <p className="text-xs text-slate-400">
-                                Build
-                              </p>
-
-                              <p className="mt-1 font-semibold text-indigo-600">
-                                {formatMinutes(
-                                  metric.buildMinutes
-                                )}
-                              </p>
-                            </div>
-
-                            <div className="mt-4">
-                              <p className="text-xs text-slate-400">
-                                Lost
-                              </p>
-
-                              <p className="mt-1 font-semibold text-slate-700">
-                                {formatMinutes(
-                                  metric.lostMinutes
-                                )}
-                              </p>
-                            </div>
-
-                            <div className="mt-4">
-                              <p className="text-xs text-slate-400">
-                                Mood
-                              </p>
-
-                              <p className="mt-1 text-lg">
-                                {metric.mood ===
-                                null
-                                  ? "—"
-                                  : metric.mood ===
-                                      1
-                                    ? "😞"
-                                    : metric.mood ===
-                                        2
-                                      ? "😕"
-                                      : metric.mood ===
-                                          3
-                                        ? "😐"
-                                        : metric.mood ===
-                                            4
-                                          ? "🙂"
-                                          : "😄"}
-                              </p>
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-                </div>
               </section>
 
+              {/* TIME ALLOCATION + BUILD FOCUS */}
+
               <div className="mt-6 grid gap-6 lg:grid-cols-2">
-                {/* TIME ALLOCATION */}
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-900">
-                      Time Allocation
-                    </h2>
 
-                    <p className="mt-1 text-sm text-slate-400">
-                      Actual completed time plus
-                      Lost time over the last 7
-                      days.
-                    </p>
-                  </div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Time Allocation
+                  </h2>
+
+                  <p className="mt-1 text-sm text-slate-400">
+                    Completed time plus Lost
+                    planned time during the
+                    selected period.
+                  </p>
 
                   <div className="mt-6 space-y-5">
+
                     {categoryNames.map(
                       (category) => (
                         <MetricBar
@@ -891,24 +1098,24 @@ export default function InsightsPage() {
                         />
                       )
                     )}
+
                   </div>
+
                 </section>
 
-                {/* BUILD FOCUS */}
-
                 <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-900">
-                      Build Focus
-                    </h2>
 
-                    <p className="mt-1 text-sm text-slate-400">
-                      Where your Future Building
-                      time is going.
-                    </p>
-                  </div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Build Focus
+                  </h2>
+
+                  <p className="mt-1 text-sm text-slate-400">
+                    Where your completed Build
+                    time is being invested.
+                  </p>
 
                   <div className="mt-6 space-y-5">
+
                     {buildFocusNames.map(
                       (focus) => (
                         <MetricBar
@@ -932,35 +1139,128 @@ export default function InsightsPage() {
                         />
                       )
                     )}
+
                   </div>
+
                 </section>
+
               </div>
 
-              {/* ANALYTICS NOTE */}
+              {/* LOST TIME DRIVERS */}
+
+              <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      Lost Time Drivers
+                    </h2>
+
+                    <p className="mt-1 text-sm text-slate-400">
+                      Planned routine activities
+                      responsible for the most
+                      Lost time.
+                    </p>
+                  </div>
+
+                  <div className="text-left sm:text-right">
+
+                    <p className="text-xs uppercase tracking-wide text-slate-400">
+                      Build-to-Lost Ratio
+                    </p>
+
+                    <p className="mt-1 text-xl font-bold text-slate-900">
+                      {analytics
+                        .buildToLostRatio ===
+                      null
+                        ? "—"
+                        : `${analytics.buildToLostRatio.toFixed(
+                            1
+                          )}x`}
+                    </p>
+
+                  </div>
+
+                </div>
+
+                <div className="mt-6 space-y-5">
+
+                  {analytics.lostDrivers
+                    .length > 0 ? (
+
+                    analytics.lostDrivers.map(
+                      (driver) => (
+                        <MetricBar
+                          key={driver.title}
+                          label={driver.title}
+                          value={driver.minutes}
+                          maximum={
+                            maximumLostDriverMinutes
+                          }
+                          displayValue={formatMinutes(
+                            driver.minutes
+                          )}
+                        />
+                      )
+                    )
+
+                  ) : (
+
+                    <div className="rounded-xl bg-slate-50 p-5">
+
+                      <p className="text-sm font-medium text-slate-700">
+                        No Lost routine activities
+                        in this period.
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-400">
+                        Lost Time Drivers will
+                        appear here when planned
+                        routine activities are
+                        marked Lost.
+                      </p>
+
+                    </div>
+
+                  )}
+
+                </div>
+
+              </section>
+
+              {/* EXPLANATION */}
 
               <section className="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-6">
+
                 <p className="text-xs font-medium uppercase tracking-wide text-indigo-600">
                   LifeOS Analytics
                 </p>
 
                 <h2 className="mt-2 text-lg font-semibold text-slate-900">
-                  Your data becomes more valuable
-                  over time.
+                  One view of execution, time and
+                  future investment.
                 </h2>
 
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                  LifeOS is collecting planned
-                  activity, actual activity,
-                  adherence, Build focus, Lost time
-                  and mood data. As more days are
-                  recorded, this page will reveal
-                  stronger patterns in consistency,
-                  time allocation and progress
-                  toward your future.
+                <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-600">
+                  Daily Score measures how many
+                  resolved routine activities were
+                  completed. Plan Adherence shows
+                  how many completed routine
+                  activities followed the original
+                  plan. Build % shows the share of
+                  completed time invested in Build,
+                  while Lost Time measures planned
+                  routine time marked Lost against
+                  resolved planned routine time.
                 </p>
+
               </section>
+
             </>
+
           )}
+
         </div>
       </section>
     </main>

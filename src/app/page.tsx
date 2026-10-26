@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/client";
 import Link from "next/link";
 import LifeOSSidebar from "@/components/LifeOSSidebar";
+import QuickCapture from "@/components/QuickCapture";
 
 
 type RoutineItem = {
@@ -1435,12 +1436,7 @@ reminderMinutes:
               </p>
             </div>
 
-            <button
-              onClick={() => setShowQuickCapture(true)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium shadow-sm sm:w-auto"
-              >
-              + Quick Capture
-            </button>
+            <QuickCapture />
           </header>
 
 {/* Date Selector */}
@@ -1903,131 +1899,7 @@ reminderMinutes:
         </section>
       </div>
 
-{/* ----------------------------------------------
-    Quick Capture Modal
----------------------------------------------- */}
 
-{showQuickCapture && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-    <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-
-      <h3 className="text-lg font-semibold text-slate-900">
-        Quick Capture
-      </h3>
-
-      <p className="mt-1 text-sm text-slate-500">
-        Capture it now. Organise it later.
-      </p>
-
-      <div className="mt-6 space-y-4">
-
-        <div>
-          <label className="mb-2 block text-xs font-medium text-slate-500">
-            Title
-          </label>
-
-          <input
-            type="text"
-            value={quickTitle}
-            onChange={(e) => setQuickTitle(e.target.value)}
-            placeholder="What's on your mind?"
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500"
-          />
-        </div>
-
-        <div>
-          <label className="mb-2 block text-xs font-medium text-slate-500">
-            Type
-          </label>
-
-          <select
-            value={quickType}
-            onChange={(e) => setQuickType(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:border-indigo-500"
-          >
-            <option value="business">Business</option>
-            <option value="career">Career</option>
-            <option value="project">Project</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="mb-2 block text-xs font-medium text-slate-500">
-            Priority
-          </label>
-
-          <select
-            value={quickPriority}
-            onChange={(e) => setQuickPriority(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:border-indigo-500"
-          >
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="mb-2 block text-xs font-medium text-slate-500">
-            Notes
-          </label>
-
-          <textarea
-            value={quickDescription}
-            onChange={(e) => setQuickDescription(e.target.value)}
-            placeholder="Add a little context..."
-            className="min-h-20 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-indigo-500"
-          />
-        </div>
-
-        <div>
-          <label className="mb-2 block text-xs font-medium text-slate-500">
-            Next action
-          </label>
-
-          <input
-            type="text"
-            value={quickNextAction}
-            onChange={(e) => setQuickNextAction(e.target.value)}
-            placeholder="What's the next step?"
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500"
-          />
-        </div>
-
-      </div>
-
-
-
-      <div className="mt-6 flex justify-end gap-3">
-
-        <button
-          type="button"
-          onClick={() => {
-            setShowQuickCapture(false);
-            setQuickTitle("");
-            setQuickDescription("");
-            setQuickType("project");
-            setQuickPriority("medium");
-            setQuickNextAction("");
-          }}
-          className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600"
-        >
-          Cancel
-        </button>
-
-        <button
-          type="button"
-          onClick={saveQuickCapture}
-          disabled={isSavingQuickCapture}
-          className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isSavingQuickCapture ? "Saving..." : "Capture"}
-        </button>
-
-      </div>
-    </div>
-  </div>
-)}
 
 {/* ----------------------------------------------
     Add Activity Modal
