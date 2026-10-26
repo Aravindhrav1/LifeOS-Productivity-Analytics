@@ -432,15 +432,29 @@ Project screenshots will demonstrate the complete LifeOS workflow.
 
 ### 7-Day Insights
 
-![LifeOS 30-Day Insights](public/Insights%2030Days.png)
+![LifeOS 30-Day Insights](public/Insights.png)
 
 ### 30-Day Insights
 
-_Add screenshot here_
+![LifeOS 30-Day Insights](public/Insights%2030Days.png)
 
 ### Power BI Dashboard
 
-_Add Power BI screenshot here_
+#### Executive Overview
+
+![LifeOS Power BI Executive Overview](public/Executive%20Overview.png)
+
+#### Time & Productivity Analysis
+
+![LifeOS Power BI Time and Productivity](public/Time%20%26%20Productivity.png)
+
+#### Build & Lost Analysis
+
+![LifeOS Power BI Build and Lost Analysis](public/Build%20%26%20Lost%20Analysis.png)
+
+#### Goals & Projects
+
+![LifeOS Power BI Goals and Projects](public/Goals%20%26%20Projects.png)
 
 ---
 
