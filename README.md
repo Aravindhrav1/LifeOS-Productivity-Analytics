@@ -486,19 +486,20 @@ This project was developed through an end-to-end lifecycle:
 
 ---
 
-# Future Improvements
+## Future Improvements
 
-Potential future development could include:
+LifeOS V1 focuses on structured planning, activity tracking and descriptive analytics. Future versions could extend the platform with:
 
-- Automated behavioural recommendations
-- Goal and project analytics
-- More advanced Build Focus reporting
-- Longer-term trend analysis
-- Additional notification capabilities
-- Enhanced mobile experience
-- Automated Power BI refresh/reporting
-
-These are intentionally treated as future improvements rather than current functionality.
+- **AI Productivity Coach** – analyse historical activity patterns and provide personalised recommendations.
+- **AI Weekly Review** – automatically summarise performance, lost-time drivers, Build activity and changes in plan adherence.
+- **Predictive Analytics** – identify activities that are at higher risk of being missed based on historical behaviour.
+- **Smart Scheduling** – recommend better activity times based on previous completion and adherence patterns.
+- **Goal Recommendations** – connect daily behaviour with longer-term goals and highlight when progress is falling behind.
+- **Anomaly Detection** – identify unusual changes in sleep, productivity, Build time or lost time.
+- **Natural-Language Analytics** – allow questions such as “Why was my productivity lower this week?” or “What caused most of my lost time this month?”
+- **Automated Power BI Refresh** – maintain an automatically refreshed reporting layer for longer-term analysis.
+- **Enhanced Notifications** – smarter reminders based on priority, schedule and previous behaviour.
+- **Extended Trend Analysis** – monthly, quarterly and year-over-year productivity analysis as more historical data becomes available.
 
 ---
 
